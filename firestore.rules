@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owns(uid) { return signedIn() && request.auth.uid == uid; }
+    function only(fields) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields); }
+    function validCurrency(value) { return value is string && value.matches('^[A-Z]{3}$'); }
+    function reasonableText(value, max) { return value is string && value.size() <= max; }
+
+    match /users/{uid} {
+      allow read, write: if false;
+
+      match /profile/{docId} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid)
+          && request.resource.data.schemaVersion == 1
+          && validCurrency(request.resource.data.baseCurrencyCode)
+          && reasonableText(request.resource.data.timezone, 64);
+        allow delete: if false;
+      }
+
+      match /settings/{docId} {
+        allow read, create, update: if owns(uid);
+        allow delete: if false;
+      }
+
+      match /accounts/{accountId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid)
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.type in ['cash', 'debit', 'credit', 'savings', 'wallet', 'other']
+          && validCurrency(request.resource.data.currencyCode)
+          && request.resource.data.initialBalanceMinor is int
+          && request.resource.data.currentBalanceMinor == request.resource.data.initialBalanceMinor
+          && request.resource.data.schemaVersion == 1;
+        allow update: if owns(uid)
+          && only(['name', 'type', 'archived', 'updatedAt'])
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.type in ['cash', 'debit', 'credit', 'savings', 'wallet', 'other'];
+        allow delete: if false;
+      }
+
+      match /categories/{categoryId} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid)
+          && reasonableText(request.resource.data.name, 48)
+          && request.resource.data.schemaVersion == 1;
+        allow delete: if false;
+      }
+
+      match /transactions/{transactionId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid)
+          && request.resource.data.keys().hasAll([
+            'type', 'amountMinor', 'currencyCode', 'accountId', 'description',
+            'occurredAt', 'status', 'schemaVersion'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'type', 'amountMinor', 'currencyCode', 'accountId',
+            'destinationAccountId', 'categoryId', 'description', 'occurredAt',
+            'status', 'schemaVersion', 'createdAt', 'updatedAt', 'recurringRuleId'
+          ])
+          && request.resource.data.type in ['expense', 'income', 'transfer', 'adjustment']
+          && request.resource.data.amountMinor is int
+          && request.resource.data.amountMinor > 0
+          && request.resource.data.amountMinor <= 999999999999
+          && validCurrency(request.resource.data.currencyCode)
+          && reasonableText(request.resource.data.accountId, 128)
+          && reasonableText(request.resource.data.description, 120)
+          && request.resource.data.occurredAt is timestamp
+          && request.resource.data.status in ['posted', 'pending', 'void']
+          && request.resource.data.schemaVersion == 1
+          && (request.resource.data.type != 'transfer'
+              || request.resource.data.destinationAccountId is string);
+        allow update: if owns(uid)
+          && only(['description', 'categoryId', 'occurredAt', 'status', 'updatedAt'])
+          && reasonableText(request.resource.data.description, 120)
+          && request.resource.data.status in ['posted', 'pending', 'void'];
+        allow delete: if false;
+      }
+
+      match /budgets/{budgetId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid)
+          && request.resource.data.keys().hasOnly([
+            'name', 'categoryId', 'period', 'limitMinor', 'spentMinor',
+            'currencyCode', 'alertAt80', 'alertAt100', 'active',
+            'schemaVersion', 'createdAt', 'updatedAt'
+          ])
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.limitMinor is int
+          && request.resource.data.limitMinor > 0
+          && request.resource.data.spentMinor == 0
+          && validCurrency(request.resource.data.currencyCode)
+          && request.resource.data.schemaVersion == 1;
+        allow update: if owns(uid)
+          && only(['name', 'limitMinor', 'alertAt80', 'alertAt100', 'active', 'updatedAt'])
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.limitMinor is int
+          && request.resource.data.limitMinor > 0;
+        allow delete: if false;
+      }
+
+      match /goals/{goalId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid)
+          && request.resource.data.keys().hasOnly([
+            'name', 'targetAmountMinor', 'savedAmountMinor', 'currencyCode',
+            'archived', 'schemaVersion', 'createdAt', 'updatedAt'
+          ])
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.targetAmountMinor is int
+          && request.resource.data.targetAmountMinor > 0
+          && request.resource.data.savedAmountMinor == 0
+          && validCurrency(request.resource.data.currencyCode)
+          && request.resource.data.schemaVersion == 1;
+        allow update: if owns(uid)
+          && only(['name', 'targetAmountMinor', 'archived', 'updatedAt'])
+          && reasonableText(request.resource.data.name, 60)
+          && request.resource.data.targetAmountMinor is int
+          && request.resource.data.targetAmountMinor > 0;
+        allow delete: if false;
+      }
+
+      match /recurringRules/{ruleId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid)
+          && request.resource.data.keys().hasOnly([
+            'type', 'description', 'amountMinor', 'currencyCode', 'accountId',
+            'categoryId', 'frequency', 'nextRunAt', 'active', 'schemaVersion',
+            'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.type in ['expense', 'income']
+          && reasonableText(request.resource.data.description, 120)
+          && request.resource.data.amountMinor is int
+          && request.resource.data.amountMinor > 0
+          && validCurrency(request.resource.data.currencyCode)
+          && request.resource.data.frequency in ['weekly', 'monthly', 'yearly']
+          && request.resource.data.nextRunAt is timestamp
+          && request.resource.data.schemaVersion == 1;
+        allow update: if owns(uid)
+          && only([
+            'description', 'amountMinor', 'accountId', 'categoryId',
+            'frequency', 'nextRunAt', 'active', 'updatedAt'
+          ])
+          && reasonableText(request.resource.data.description, 120)
+          && request.resource.data.amountMinor is int
+          && request.resource.data.amountMinor > 0
+          && request.resource.data.frequency in ['weekly', 'monthly', 'yearly']
+          && request.resource.data.nextRunAt is timestamp;
+        allow delete: if false;
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if owns(uid);
+        allow update: if owns(uid) && only(['readAt']);
+        allow create, delete: if false;
+      }
+
+      match /exports/{exportId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+
+      match /monthlySummaries/{summaryId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+
+      match /monthlyCategorySummaries/{summaryId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

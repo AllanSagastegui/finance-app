@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>995162681734-mpc9i8j77vcm03dsr5ienjqj5ls8811n.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.995162681734-mpc9i8j77vcm03dsr5ienjqj5ls8811n</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDVuZJ5_cHMvLFEzJPrJOfRA6KnBcrBzT4</string>
+	<key>GCM_SENDER_ID</key>
+	<string>995162681734</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>pe.ask.financeApp</string>
+	<key>PROJECT_ID</key>
+	<string>finance-app-b84c1</string>
+	<key>STORAGE_BUCKET</key>
+	<string>finance-app-b84c1.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:995162681734:ios:f9a352845e1ecdff70bc07</string>
+</dict>
+</plist>

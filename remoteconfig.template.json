@@ -1,0 +1,26 @@
+{
+  "conditions": [],
+  "parameters": {
+    "maintenance_mode": {
+      "defaultValue": { "value": "false" },
+      "description": "Detiene flujos no críticos durante mantenimiento."
+    },
+    "receipts_enabled": {
+      "defaultValue": { "value": "false" },
+      "description": "Activa la carga de recibos en Firebase Storage."
+    },
+    "biometrics_enabled": {
+      "defaultValue": { "value": "true" },
+      "description": "Muestra el bloqueo biométrico si el dispositivo lo soporta."
+    },
+    "csv_import_enabled": {
+      "defaultValue": { "value": "false" },
+      "description": "Rollout gradual del importador CSV."
+    },
+    "minimum_supported_build": {
+      "defaultValue": { "value": "1" },
+      "description": "Build mínimo admitido. No es un control de autorización."
+    }
+  },
+  "version": { "description": "Defaults seguros de Aurea" }
+}
