@@ -16,12 +16,12 @@ service cloud.firestore {
           && request.resource.data.schemaVersion == 1
           && validCurrency(request.resource.data.baseCurrencyCode)
           && reasonableText(request.resource.data.timezone, 64);
-        allow delete: if false;
+        allow delete: if owns(uid);
       }
 
       match /settings/{docId} {
         allow read, create, update: if owns(uid);
-        allow delete: if false;
+        allow delete: if owns(uid);
       }
 
       match /accounts/{accountId} {
@@ -34,10 +34,12 @@ service cloud.firestore {
           && request.resource.data.currentBalanceMinor == request.resource.data.initialBalanceMinor
           && request.resource.data.schemaVersion == 1;
         allow update: if owns(uid)
-          && only(['name', 'type', 'archived', 'updatedAt'])
-          && reasonableText(request.resource.data.name, 60)
-          && request.resource.data.type in ['cash', 'debit', 'credit', 'savings', 'wallet', 'other'];
-        allow delete: if false;
+            && only([
+              'name', 'type', 'archived', 'currentBalanceMinor', 'updatedAt'
+            ])
+            && reasonableText(request.resource.data.name, 60)
+            && request.resource.data.type in ['cash', 'debit', 'credit', 'savings', 'wallet', 'other'];
+        allow delete: if owns(uid);
       }
 
       match /categories/{categoryId} {
@@ -45,7 +47,7 @@ service cloud.firestore {
         allow create, update: if owns(uid)
           && reasonableText(request.resource.data.name, 48)
           && request.resource.data.schemaVersion == 1;
-        allow delete: if false;
+        allow delete: if owns(uid);
       }
 
       match /transactions/{transactionId} {
@@ -57,12 +59,17 @@ service cloud.firestore {
           ])
           && request.resource.data.keys().hasOnly([
             'type', 'amountMinor', 'currencyCode', 'accountId',
-            'destinationAccountId', 'categoryId', 'description', 'occurredAt',
-            'status', 'schemaVersion', 'createdAt', 'updatedAt', 'recurringRuleId'
+            'destinationAccountId', 'goalId', 'categoryId', 'description', 'occurredAt',
+            'status', 'schemaVersion', 'createdAt', 'updatedAt', 'recurringRuleId',
+            'goalAllocationMinor'
           ])
           && request.resource.data.type in ['expense', 'income', 'transfer', 'adjustment']
           && request.resource.data.amountMinor is int
           && request.resource.data.amountMinor > 0
+          && (!request.resource.data.keys().hasAny(['goalAllocationMinor'])
+              || (request.resource.data.goalAllocationMinor is int
+                  && request.resource.data.goalAllocationMinor >= 0
+                  && request.resource.data.goalAllocationMinor <= request.resource.data.amountMinor))
           && request.resource.data.amountMinor <= 999999999999
           && validCurrency(request.resource.data.currencyCode)
           && reasonableText(request.resource.data.accountId, 128)
@@ -71,12 +78,13 @@ service cloud.firestore {
           && request.resource.data.status in ['posted', 'pending', 'void']
           && request.resource.data.schemaVersion == 1
           && (request.resource.data.type != 'transfer'
-              || request.resource.data.destinationAccountId is string);
+              || request.resource.data.destinationAccountId is string
+              || request.resource.data.goalId is string);
         allow update: if owns(uid)
           && only(['description', 'categoryId', 'occurredAt', 'status', 'updatedAt'])
           && reasonableText(request.resource.data.description, 120)
           && request.resource.data.status in ['posted', 'pending', 'void'];
-        allow delete: if false;
+        allow delete: if owns(uid);
       }
 
       match /budgets/{budgetId} {
@@ -84,6 +92,7 @@ service cloud.firestore {
         allow create: if owns(uid)
           && request.resource.data.keys().hasOnly([
             'name', 'categoryId', 'period', 'limitMinor', 'spentMinor',
+            'spentPeriodKey',
             'currencyCode', 'alertAt80', 'alertAt100', 'active',
             'schemaVersion', 'createdAt', 'updatedAt'
           ])
@@ -94,11 +103,17 @@ service cloud.firestore {
           && validCurrency(request.resource.data.currencyCode)
           && request.resource.data.schemaVersion == 1;
         allow update: if owns(uid)
-          && only(['name', 'limitMinor', 'alertAt80', 'alertAt100', 'active', 'updatedAt'])
+          && only([
+            'name', 'limitMinor', 'spentMinor', 'spentPeriodKey',
+            'alertAt80', 'alertAt100',
+            'active', 'updatedAt'
+          ])
           && reasonableText(request.resource.data.name, 60)
           && request.resource.data.limitMinor is int
-          && request.resource.data.limitMinor > 0;
-        allow delete: if false;
+          && request.resource.data.limitMinor > 0
+          && request.resource.data.spentMinor is int
+          && request.resource.data.spentMinor >= 0;
+        allow delete: if owns(uid);
       }
 
       match /goals/{goalId} {
@@ -115,11 +130,16 @@ service cloud.firestore {
           && validCurrency(request.resource.data.currencyCode)
           && request.resource.data.schemaVersion == 1;
         allow update: if owns(uid)
-          && only(['name', 'targetAmountMinor', 'archived', 'updatedAt'])
+          && only([
+            'name', 'targetAmountMinor', 'savedAmountMinor', 'archived',
+            'updatedAt'
+          ])
           && reasonableText(request.resource.data.name, 60)
           && request.resource.data.targetAmountMinor is int
-          && request.resource.data.targetAmountMinor > 0;
-        allow delete: if false;
+          && request.resource.data.targetAmountMinor > 0
+          && request.resource.data.savedAmountMinor is int
+          && request.resource.data.savedAmountMinor >= 0;
+        allow delete: if owns(uid);
       }
 
       match /recurringRules/{ruleId} {
@@ -148,13 +168,14 @@ service cloud.firestore {
           && request.resource.data.amountMinor > 0
           && request.resource.data.frequency in ['weekly', 'monthly', 'yearly']
           && request.resource.data.nextRunAt is timestamp;
-        allow delete: if false;
+        allow delete: if owns(uid);
       }
 
       match /notifications/{notificationId} {
         allow read: if owns(uid);
         allow update: if owns(uid) && only(['readAt']);
-        allow create, delete: if false;
+        allow create: if false;
+        allow delete: if owns(uid);
       }
 
       match /exports/{exportId} {

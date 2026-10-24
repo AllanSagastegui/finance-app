@@ -6,6 +6,8 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../preferences/app_preferences.dart';
+
 class FirebaseBootstrapState {
   const FirebaseBootstrapState({required this.isReady, this.error});
   final bool isReady;
@@ -44,7 +46,10 @@ class FirebaseBootstrap {
         );
       }
       // Collection is opt-in. Financial values/text never go to Analytics.
-      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+      final analyticsEnabled = await AppPreferences().isAnalyticsEnabled();
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(
+        analyticsEnabled,
+      );
 
       final config = FirebaseRemoteConfig.instance;
       await config.setDefaults(const {

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -42,7 +43,19 @@ class BiometricLockService {
         biometricOnly: true,
         persistAcrossBackgrounding: true,
       );
-    } catch (_) {
+    } on LocalAuthException catch (error) {
+      // Cancellation and temporary lockouts are expected user outcomes. The
+      // gate remains locked and lets the user retry without crashing the app.
+      switch (error.code) {
+        case LocalAuthExceptionCode.userCanceled:
+        case LocalAuthExceptionCode.systemCanceled:
+        case LocalAuthExceptionCode.temporaryLockout:
+        case LocalAuthExceptionCode.biometricLockout:
+          return false;
+        default:
+          return false;
+      }
+    } on PlatformException {
       return false;
     }
   }

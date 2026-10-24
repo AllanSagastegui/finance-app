@@ -17,7 +17,7 @@ class CreateFirstAccountScreen extends ConsumerStatefulWidget {
 class _CreateFirstAccountScreenState
     extends ConsumerState<CreateFirstAccountScreen> {
   final _name = TextEditingController(text: 'Efectivo');
-  final _balance = TextEditingController(text: '0.00');
+  final _balance = TextEditingController();
   AccountType _type = AccountType.cash;
   String _currency = 'PEN';
   bool _saving = false;
@@ -134,6 +134,7 @@ class _CreateFirstAccountScreenState
                           ),
                           decoration: const InputDecoration(
                             labelText: 'Saldo inicial',
+                            hintText: '0.00',
                           ),
                         ),
                       ),
@@ -168,7 +169,9 @@ class _CreateFirstAccountScreenState
   );
 
   Future<void> _save() async {
-    final balance = Money.tryParseMinor(_balance.text);
+    final balance = Money.tryParseMinor(
+      _balance.text.trim().isEmpty ? '0' : _balance.text,
+    );
     if (_name.text.trim().isEmpty || balance == null) {
       setState(() => _error = 'Revisa el nombre y el saldo inicial.');
       return;

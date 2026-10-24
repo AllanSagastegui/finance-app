@@ -1,13 +1,20 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app.dart';
 import '../../../core/firebase/firebase_bootstrap.dart';
 import '../../../core/security/biometric_lock_service.dart';
+import '../../../core/preferences/app_preferences.dart';
 
 class SecurityScreen extends StatefulWidget {
   const SecurityScreen({super.key});
@@ -143,9 +150,28 @@ class DataPrivacyScreen extends StatefulWidget {
 }
 
 class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
+  final _preferences = AppPreferences();
   bool _analytics = false;
   bool _notifications = false;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restorePreferences();
+  }
+
+  Future<void> _restorePreferences() async {
+    final values = await Future.wait([
+      _preferences.isAnalyticsEnabled(),
+      _preferences.areNotificationsEnabled(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _analytics = values[0];
+      _notifications = values[1];
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -172,6 +198,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                 onChanged: (value) async {
                   await FirebaseAnalytics.instance
                       .setAnalyticsCollectionEnabled(value);
+                  await _preferences.setAnalyticsEnabled(value);
                   if (mounted) {
                     setState(() => _analytics = value);
                   }
@@ -196,6 +223,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                             AuthorizationStatus.provisional;
                   }
                   if (mounted) {
+                    await _preferences.setNotificationsEnabled(value);
                     setState(() => _notifications = value);
                   }
                 },
@@ -225,15 +253,39 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
   Future<void> _requestExport() async {
     setState(() => _busy = true);
     try {
-      await FirebaseFunctions.instance.httpsCallable('createExport').call({
-        'format': 'csv',
-      });
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Authentication required');
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users/${user.uid}/transactions')
+          .orderBy('occurredAt')
+          .get();
+      final rows = <List<Object?>>[
+        ['fecha', 'tipo', 'importe', 'moneda', 'cuenta', 'descripción'],
+        ...snapshot.docs.map((document) {
+          final data = document.data();
+          final occurredAt = (data['occurredAt'] as Timestamp?)?.toDate();
+          return [
+            occurredAt?.toIso8601String() ?? '',
+            data['type'] ?? '',
+            data['amountMinor'] ?? 0,
+            data['currencyCode'] ?? '',
+            data['accountId'] ?? '',
+            data['description'] ?? '',
+          ];
+        }),
+      ];
+      final destination = await FilePicker.saveFile(
+        dialogTitle: 'Guardar exportación',
+        fileName: 'aurea_movimientos.csv',
+        bytes: Uint8List.fromList(Csv().encode(rows).codeUnits),
+      );
+      if (destination == null) return;
       if (mounted) {
-        _notice('Prepararemos el archivo y te avisaremos cuando esté listo.');
+        _notice('Exportación guardada correctamente.');
       }
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseException catch (error) {
       if (mounted) {
-        _notice('No se pudo solicitar la exportación (${error.code}).');
+        _notice('No se pudo exportar (${error.code}).');
       }
     } finally {
       if (mounted) {
@@ -265,15 +317,43 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
     if (confirmed != true) return;
     setState(() => _busy = true);
     try {
-      await FirebaseFunctions.instance
-          .httpsCallable('deleteAccountData')
-          .call();
-      if (mounted) {
-        _notice('El borrado se inició. Recibirás el estado dentro de la app.');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Authentication required');
+      final firestore = FirebaseFirestore.instance;
+      const collections = [
+        'transactions',
+        'accounts',
+        'budgets',
+        'goals',
+        'recurringRules',
+        'categories',
+        'notifications',
+        'settings',
+        'profile',
+      ];
+      for (final collection in collections) {
+        final snapshot = await firestore
+            .collection('users/${user.uid}/$collection')
+            .get();
+        for (var offset = 0; offset < snapshot.docs.length; offset += 400) {
+          final batch = firestore.batch();
+          for (final document in snapshot.docs.skip(offset).take(400)) {
+            batch.delete(document.reference);
+          }
+          await batch.commit();
+        }
       }
-    } on FirebaseFunctionsException catch (error) {
+      await user.delete();
       if (mounted) {
-        _notice('No se pudo iniciar el borrado (${error.code}).');
+        context.go('/welcome');
+      }
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        _notice(
+          error.code == 'requires-recent-login'
+              ? 'Por seguridad, vuelve a iniciar sesión y repite el borrado.'
+              : 'No se pudo eliminar la cuenta (${error.code}).',
+        );
       }
     } finally {
       if (mounted) {

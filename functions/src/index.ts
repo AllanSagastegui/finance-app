@@ -17,6 +17,9 @@ type Tx = {
   currencyCode: string;
   occurredAt: FirebaseFirestore.Timestamp;
   categoryId?: string;
+  accountId?: string;
+  destinationAccountId?: string;
+  goalId?: string;
 };
 
 function signedAmount(tx?: Tx): number {
@@ -59,12 +62,11 @@ function addAccountDelta(
   const add = (id: string | undefined, value: number) => {
     if (id) deltas.set(id, (deltas.get(id) ?? 0) + value);
   };
-  const record = tx as Tx & { accountId?: string; destinationAccountId?: string };
   if (tx.type === "transfer") {
-    add(record.accountId, -multiplier * tx.amountMinor);
-    add(record.destinationAccountId, multiplier * tx.amountMinor);
+    add(tx.accountId, -multiplier * tx.amountMinor);
+    add(tx.destinationAccountId, multiplier * tx.amountMinor);
   } else {
-    add(record.accountId, multiplier * signedAmount(tx));
+    add(tx.accountId, multiplier * signedAmount(tx));
   }
 }
 
@@ -81,10 +83,32 @@ export const onTransactionWrite = onDocumentWritten(
     const accountDeltas = new Map<string, number>();
     addAccountDelta(accountDeltas, before, -1);
     addAccountDelta(accountDeltas, after, 1);
+    const budgetDeltas = new Map<string, number>();
+    const goalDeltas = new Map<string, number>();
+    const addPlanDelta = (tx: Tx | undefined, multiplier: number) => {
+      if (!tx || tx.status !== "posted") return;
+      if (tx.type === "expense" && tx.categoryId) {
+        budgetDeltas.set(
+          tx.categoryId,
+          (budgetDeltas.get(tx.categoryId) ?? 0) + multiplier * tx.amountMinor,
+        );
+      }
+      if (tx.type === "transfer" && tx.goalId) {
+        goalDeltas.set(
+          tx.goalId,
+          (goalDeltas.get(tx.goalId) ?? 0) + multiplier * tx.amountMinor,
+        );
+      }
+    };
+    addPlanDelta(before, -1);
+    addPlanDelta(after, 1);
 
     const marker = db.doc(`functionEvents/${event.id}`);
     await db.runTransaction(async (transaction) => {
       if ((await transaction.get(marker)).exists) return;
+      const budgets = await transaction.get(
+        db.collection(`users/${event.params.uid}/budgets`).where("active", "==", true),
+      );
       for (const [period, delta] of summaryDeltas) {
         const summary = db.doc(
           `users/${event.params.uid}/monthlySummaries/${period}`,
@@ -103,6 +127,27 @@ export const onTransactionWrite = onDocumentWritten(
           db.doc(`users/${event.params.uid}/accounts/${accountId}`),
           {
             currentBalanceMinor: FieldValue.increment(delta),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        );
+      }
+      for (const budget of budgets.docs) {
+        const data = budget.data();
+        const delta = data.categoryId === "all" || data.categoryId === "other"
+          ? [...budgetDeltas.values()].reduce((sum, value) => sum + value, 0)
+          : budgetDeltas.get(data.categoryId) ?? 0;
+        if (delta !== 0) {
+          transaction.update(budget.ref, {
+            spentMinor: FieldValue.increment(delta),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      for (const [goalId, delta] of goalDeltas) {
+        transaction.update(
+          db.doc(`users/${event.params.uid}/goals/${goalId}`),
+          {
+            savedAmountMinor: FieldValue.increment(delta),
             updatedAt: FieldValue.serverTimestamp(),
           },
         );

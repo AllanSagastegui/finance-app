@@ -47,7 +47,7 @@ class AureaTheme {
       seedColor: seed,
       brightness: brightness,
       surface: dark ? AureaColors.midnight : AureaColors.paper,
-      primary: AureaColors.indigo,
+      primary: dark ? const Color(0xFF8B8CFF) : AureaColors.indigoDark,
       secondary: AureaColors.teal,
       error: AureaColors.negative,
     );
@@ -104,9 +104,11 @@ class AureaTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        elevation: dark ? 0 : .5,
-        shadowColor: AureaColors.ink.withValues(alpha: .08),
-        color: dark ? const Color(0xFF141820) : Colors.white,
+        elevation: dark ? 0 : 1,
+        shadowColor: dark
+            ? Colors.black.withValues(alpha: .22)
+            : AureaColors.ink.withValues(alpha: .08),
+        color: dark ? const Color(0xFF161B26) : Colors.white,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AureaRadius.lg),
@@ -183,7 +185,7 @@ class AureaTheme {
         backgroundColor: dark
             ? const Color(0xF2141820)
             : const Color(0xFAFFFFFF),
-        indicatorColor: AureaColors.indigo.withValues(alpha: .16),
+        indicatorColor: scheme.primary.withValues(alpha: .16),
         indicatorShape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AureaRadius.md),
         ),

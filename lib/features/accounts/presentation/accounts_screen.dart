@@ -208,7 +208,7 @@ class _AccountEditorState extends ConsumerState<_AccountEditor> {
     super.initState();
     final account = widget.account;
     _name = TextEditingController(text: account?.name ?? '');
-    _balance = TextEditingController(text: '0.00');
+    _balance = TextEditingController();
     _type = account?.type ?? AccountType.cash;
     _currency = account?.currencyCode ?? 'PEN';
   }
@@ -287,6 +287,7 @@ class _AccountEditorState extends ConsumerState<_AccountEditor> {
                       textInputAction: TextInputAction.done,
                       decoration: const InputDecoration(
                         labelText: 'Saldo inicial',
+                        hintText: '0.00',
                       ),
                     ),
                   ),
@@ -331,7 +332,9 @@ class _AccountEditorState extends ConsumerState<_AccountEditor> {
 
   Future<void> _save() async {
     final name = _name.text.trim();
-    final initialBalance = Money.tryParseMinor(_balance.text);
+    final initialBalance = Money.tryParseMinor(
+      _balance.text.trim().isEmpty ? '0' : _balance.text,
+    );
     if (name.isEmpty || (!_editing && initialBalance == null)) {
       setState(() => _error = 'Completa un nombre y un saldo válido.');
       return;

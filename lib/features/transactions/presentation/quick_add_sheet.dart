@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/money/money.dart';
 import '../../accounts/data/accounts_repository.dart';
+import '../../planning/data/planning_repository.dart';
 import '../data/finance_repository.dart';
 import '../domain/transaction_record.dart';
 
@@ -18,10 +19,13 @@ class QuickAddSheet extends ConsumerStatefulWidget {
 
 class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
   final _amount = TextEditingController();
+  final _goalAllocation = TextEditingController();
   final _note = TextEditingController();
   late TransactionType _type;
   String? _accountId;
   String? _destinationAccountId;
+  String? _goalId;
+  bool _transferToGoal = false;
   String _categoryId = 'other';
   bool _saving = false;
   String? _error;
@@ -35,6 +39,7 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
   @override
   void dispose() {
     _amount.dispose();
+    _goalAllocation.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -43,6 +48,7 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
   Widget build(BuildContext context) {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final accounts = ref.watch(accountsProvider).value ?? const [];
+    final goals = ref.watch(goalsProvider).value ?? const [];
     if (accounts.isNotEmpty) {
       _accountId ??= accounts.first.id;
       final destinations = accounts
@@ -92,14 +98,24 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
                 ),
               ],
               selected: {_type},
-              onSelectionChanged: (value) =>
-                  setState(() => _type = value.first),
+              onSelectionChanged: (value) => setState(() {
+                _type = value.first;
+                if (_type != TransactionType.transfer) {
+                  _transferToGoal = false;
+                  _goalId = null;
+                }
+              }),
               showSelectedIcon: false,
             ),
             const SizedBox(height: 22),
             TextField(
               controller: _amount,
               autofocus: true,
+              onTap: () {
+                if (_amount.text == '0.00') {
+                  _amount.clear();
+                }
+              },
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
               keyboardType: const TextInputType.numberWithOptions(
@@ -144,24 +160,103 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
             ),
             if (_type == TransactionType.transfer) ...[
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _destinationAccountId,
-                decoration: const InputDecoration(
-                  labelText: 'Cuenta de destino',
-                  prefixIcon: Icon(Icons.move_down_rounded),
-                ),
-                items: accounts
-                    .where((account) => account.id != _accountId)
-                    .map(
-                      (account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Text(account.name),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _destinationAccountId = value),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    label: Text('Cuenta'),
+                    icon: Icon(Icons.account_balance_wallet_outlined),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    label: Text('Meta'),
+                    icon: Icon(Icons.flag_outlined),
+                  ),
+                ],
+                selected: {_transferToGoal},
+                onSelectionChanged: (value) => setState(() {
+                  _transferToGoal = value.first;
+                  if (_transferToGoal) {
+                    _destinationAccountId = null;
+                  } else {
+                    _goalId = null;
+                  }
+                }),
               ),
+              const SizedBox(height: 12),
+              if (!_transferToGoal)
+                DropdownButtonFormField<String>(
+                  initialValue: _destinationAccountId,
+                  decoration: const InputDecoration(
+                    labelText: 'Cuenta de destino',
+                    prefixIcon: Icon(Icons.move_down_rounded),
+                  ),
+                  items: accounts
+                      .where((account) => account.id != _accountId)
+                      .map(
+                        (account) => DropdownMenuItem(
+                          value: account.id,
+                          child: Text(account.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _destinationAccountId = value),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: _goalId,
+                  decoration: const InputDecoration(
+                    labelText: 'Meta de ahorro',
+                    prefixIcon: Icon(Icons.flag_outlined),
+                  ),
+                  items: goals
+                      .map(
+                        (goal) => DropdownMenuItem(
+                          value: goal.id,
+                          child: Text(goal.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => _goalId = value),
+                ),
+            ],
+            if (_type == TransactionType.income && goals.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _goalId,
+                decoration: const InputDecoration(
+                  labelText: 'Asignar parte a una meta (opcional)',
+                  prefixIcon: Icon(Icons.flag_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Sin asignación'),
+                  ),
+                  ...goals.map(
+                    (goal) => DropdownMenuItem(
+                      value: goal.id,
+                      child: Text(goal.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _goalId = value),
+              ),
+              if (_goalId != null) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _goalAllocation,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    prefixText: 'S/ ',
+                    labelText: 'Cantidad para la meta',
+                    prefixIcon: Icon(Icons.savings_outlined),
+                  ),
+                ),
+              ],
             ],
             if (_type != TransactionType.transfer) ...[
               const SizedBox(height: 12),
@@ -230,8 +325,37 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
 
   Future<void> _save() async {
     final minor = Money.tryParseMinor(_amount.text);
-    if (minor == null || minor <= 0 || _accountId == null) {
-      setState(() => _error = 'Ingresa un importe mayor que cero.');
+    if (minor == null || minor <= 0) {
+      setState(() => _error = 'Ingresa un importe válido mayor que cero.');
+      return;
+    }
+    if (_accountId == null) {
+      setState(() => _error = 'Selecciona una cuenta de origen.');
+      return;
+    }
+    final goalAllocation = _type == TransactionType.income && _goalId != null
+        ? Money.tryParseMinor(_goalAllocation.text)
+        : 0;
+    if (_type == TransactionType.transfer &&
+        ((_transferToGoal && _goalId == null) ||
+            (!_transferToGoal &&
+                (_destinationAccountId == null ||
+                    _destinationAccountId == _accountId)))) {
+      setState(
+        () => _error = _transferToGoal
+            ? 'Selecciona una meta de destino.'
+            : 'Selecciona una cuenta de destino diferente.',
+      );
+      return;
+    }
+    if (_type == TransactionType.income &&
+        _goalId != null &&
+        (goalAllocation == null ||
+            goalAllocation <= 0 ||
+            goalAllocation > minor)) {
+      setState(
+        () => _error = 'La cantidad para la meta debe ser mayor que cero y no superar el ingreso.',
+      );
       return;
     }
     setState(() {
@@ -252,8 +376,10 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
             currencyCode: currencyCode ?? 'PEN',
             accountId: _accountId!,
             destinationAccountId: _type == TransactionType.transfer
-                ? _destinationAccountId
+                ? (_transferToGoal ? null : _destinationAccountId)
                 : null,
+            goalId: _goalId,
+            goalAllocationMinor: goalAllocation ?? 0,
             categoryId: _type == TransactionType.transfer ? null : _categoryId,
             occurredAt: DateTime.now(),
             description: _note.text,

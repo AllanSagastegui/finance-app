@@ -1,4 +1,7 @@
 import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +25,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         : maintenance
         ? '/maintenance'
         : '/welcome',
+    refreshListenable: _AuthRefreshNotifier(),
+    redirect: (context, state) {
+      final signedIn = FirebaseAuth.instance.currentUser != null;
+      final publicRoute =
+          state.matchedLocation == '/welcome' ||
+          state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register' ||
+          state.matchedLocation == '/setup-required' ||
+          state.matchedLocation == '/maintenance';
+      if (!signedIn && !publicRoute) return '/login';
+      if (signedIn &&
+          (state.matchedLocation == '/login' ||
+              state.matchedLocation == '/register')) {
+        return '/home';
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/welcome',
@@ -65,6 +85,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+class _AuthRefreshNotifier extends ChangeNotifier {
+  _AuthRefreshNotifier() {
+    _subscription = FirebaseAuth.instance.authStateChanges().listen((_) {
+      notifyListeners();
+    });
+  }
+
+  late final StreamSubscription<User?> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
 
 class MaintenanceScreen extends StatelessWidget {
   const MaintenanceScreen({super.key});

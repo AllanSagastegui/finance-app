@@ -21,6 +21,7 @@ class _BiometricLifecycleGateState extends State<BiometricLifecycleGate>
   bool _locked = false;
   bool _enabled = false;
   bool _authenticating = false;
+  bool _restoring = true;
 
   @override
   void initState() {
@@ -44,8 +45,16 @@ class _BiometricLifecycleGateState extends State<BiometricLifecycleGate>
     setState(() {
       _enabled = enabled;
       _locked = enabled;
+      _restoring = false;
     });
-    if (enabled) await _unlock();
+    if (enabled) {
+      // Let the protected surface paint before iOS presents the biometric
+      // sheet. Calling local_auth during the first build can leave release
+      // builds visually blank behind the system prompt.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _unlock();
+      });
+    }
   }
 
   @override
@@ -81,76 +90,94 @@ class _BiometricLifecycleGateState extends State<BiometricLifecycleGate>
 
   @override
   Widget build(BuildContext context) {
-    if (!_locked) return widget.child;
     final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [scheme.surface, scheme.primary.withValues(alpha: .08)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 84,
-                        height: 84,
-                        decoration: BoxDecoration(
-                          color: scheme.primaryContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.face_rounded,
-                          size: 44,
-                          color: scheme.onPrimaryContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      Text(
-                        'Aurea está protegida',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Usa Face ID para volver a tus finanzas. Solo lo pediremos al abrir la app o después de un minuto fuera.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: _authenticating ? null : _unlock,
-                        icon: _authenticating
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        if (_locked || _restoring)
+          Material(
+            color: scheme.surface,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    scheme.surface,
+                    scheme.primary.withValues(alpha: .08),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 84,
+                                height: 84,
+                                decoration: BoxDecoration(
+                                  color: scheme.primaryContainer,
+                                  shape: BoxShape.circle,
                                 ),
-                              )
-                            : const Icon(Icons.lock_open_rounded),
-                        label: Text(
-                          _authenticating ? 'Verificando…' : 'Desbloquear',
+                                child: Icon(
+                                  Icons.face_rounded,
+                                  size: 44,
+                                  color: scheme.onPrimaryContainer,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              Text(
+                                'Aurea está protegida',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Usa Face ID para volver a tus finanzas. Solo lo pediremos al abrir la app o después de un minuto fuera.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: _authenticating ? null : _unlock,
+                                icon: _authenticating
+                                    ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.lock_open_rounded),
+                                label: Text(
+                                  _authenticating
+                                      ? 'Verificando…'
+                                      : 'Desbloquear',
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 }

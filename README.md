@@ -25,6 +25,12 @@ Aurea es una app Flutter de finanzas personales para iOS y Android. La base incl
 
 Los importes se guardan como enteros en unidad menor (`amountMinor`). Remote Config contiene solo flags y parámetros públicos; los secretos de Functions deben declararse en Secret Manager.
 
+Las operaciones de la aplicación no dependen de Cloud Functions ni de Artifact
+Registry: saldos, presupuestos, metas, resúmenes y recurrentes se actualizan
+desde el cliente mediante transacciones de Firestore. La carpeta `functions`
+se conserva como referencia opcional y no forma parte del despliegue configurado
+por Firebase CLI.
+
 ## Configuración Firebase
 
 1. Usa proyectos separados para `dev`, `staging` y `prod`.

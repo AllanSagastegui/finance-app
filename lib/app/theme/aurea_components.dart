@@ -244,3 +244,87 @@ class AureaIconBadge extends StatelessWidget {
     );
   }
 }
+
+class AureaSkeleton extends StatelessWidget {
+  const AureaSkeleton({
+    super.key,
+    this.width = double.infinity,
+    this.height = 16,
+    this.radius = 10,
+  });
+
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.surfaceContainerHighest;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+class AureaEntrance extends StatefulWidget {
+  const AureaEntrance({
+    super.key,
+    required this.child,
+    this.delay = Duration.zero,
+    this.offset = const Offset(0, .04),
+  });
+
+  final Widget child;
+  final Duration delay;
+  final Offset offset;
+
+  @override
+  State<AureaEntrance> createState() => _AureaEntranceState();
+}
+
+class _AureaEntranceState extends State<AureaEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 520),
+  );
+  late final Animation<double> _opacity = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide = Tween<Offset>(
+    begin: widget.offset,
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+  @override
+  void initState() {
+    super.initState();
+    if (MediaQueryData.fromView(
+      WidgetsBinding.instance.platformDispatcher.views.first,
+    ).disableAnimations) {
+      _controller.value = 1;
+    } else {
+      Future<void>.delayed(widget.delay, () {
+        if (mounted) _controller.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _opacity,
+    child: SlideTransition(position: _slide, child: widget.child),
+  );
+}

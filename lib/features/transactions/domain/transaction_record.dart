@@ -13,6 +13,8 @@ class TransactionRecord {
     required this.occurredAt,
     this.categoryId,
     this.destinationAccountId,
+    this.goalId,
+    this.goalAllocationMinor = 0,
     this.syncPending = false,
   });
 
@@ -22,6 +24,8 @@ class TransactionRecord {
   final String currencyCode;
   final String accountId;
   final String? destinationAccountId;
+  final String? goalId;
+  final int goalAllocationMinor;
   final String? categoryId;
   final String description;
   final DateTime occurredAt;
@@ -42,6 +46,9 @@ class TransactionRecord {
       currencyCode: data['currencyCode'] as String? ?? 'PEN',
       accountId: data['accountId'] as String? ?? '',
       destinationAccountId: data['destinationAccountId'] as String?,
+      goalId: data['goalId'] as String?,
+      goalAllocationMinor:
+          (data['goalAllocationMinor'] as num?)?.toInt() ?? 0,
       categoryId: data['categoryId'] as String?,
       description: data['description'] as String? ?? '',
       occurredAt:
